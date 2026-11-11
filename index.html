@@ -57,6 +57,17 @@ a{color:var(--ac)}.emp{text-align:center;color:var(--mu);padding:30px}
 .rol{font-size:12px;font-weight:700;padding:3px 9px;border-radius:99px;background:var(--ac);color:#fff;margin-left:6px}
 .ac{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}.ac .ok{background:var(--ok)}.ac .no{background:var(--er)}
 .msg{color:var(--er);font-size:13px;margin-top:6px;min-height:18px}[hidden]{display:none!important}
+.pt{display:grid;grid-template-columns:2fr 1fr auto;gap:6px;margin-bottom:6px}
+.tm{font-size:12px;color:var(--ac);font-weight:600;margin-bottom:2px}
+.sum{margin-top:10px;padding:10px;border-radius:8px;background:var(--bg);border:1px solid var(--bd);font-size:13px}
+.cal{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}.cal .h{font-size:11px;color:var(--mu);text-align:center;font-weight:700}
+.cd{min-height:84px;border:1px solid var(--bd);border-radius:8px;padding:4px;cursor:pointer;background:var(--bg);overflow:hidden}
+.cd.o{opacity:.45}.cd.t{border-color:var(--ac)}.cd.s{outline:2px solid var(--ac)}.cd b{font-size:12px}
+.ev{display:block;font-size:10.5px;line-height:1.3;border-radius:4px;padding:1px 4px;margin-top:2px;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ev.p{background:#b86e00}.ev.a{background:#4159a3}.ev.e{background:#0e7c86}.ev.c{background:#168a4a}.ev.x{background:#c8372d}
+.lg{display:flex;gap:10px;flex-wrap:wrap;font-size:12px;color:var(--mu);margin-top:8px}.lg i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:4px}
+.ch.vt{margin-left:auto}
+@media(max-width:640px){.cd{min-height:54px;padding:3px}.ev{font-size:0;height:6px;padding:0}.pt{grid-template-columns:1fr 1fr auto}}
 </style></head>
 <body><div class="w">
 <header class="hero">
@@ -92,15 +103,19 @@ a{color:var(--ac)}.emp{text-align:center;color:var(--mu);padding:30px}
 <div class="f">
 <div><label>Fecha de salida</label><input type="date" id="fFecha"></div>
 <div id="wAsig"><label>Asignado a la ruta</label><select id="fAsig"></select></div>
-<div><label>Placa / vehículo</label><input id="fPlaca"></div>
 </div>
-<div style="margin-top:10px"><label>Proveedores a visitar (uno por línea, en orden)</label><textarea id="fProv" rows="3"></textarea></div>
+<div style="margin-top:10px"><label>Puntos de llegada: proveedor y Nro de DP, en orden</label><div id="fPts"></div><button class="s" id="bPt" type="button">+ Agregar punto</button></div>
 <div style="margin-top:10px"><label>Observaciones (opcional)</label><input id="fObs"></div>
 <div style="margin-top:10px"><button id="bAdd">Registrar programación</button></div>
 </details>
+<div class="card" id="calw">
+<div class="hd"><b id="cTitle" style="text-transform:capitalize"></b><div><button class="s" id="cPrev">‹</button> <button class="s" id="cHoy">Hoy</button> <button class="s" id="cNext">›</button></div></div>
+<div class="cal" id="cGrid" style="margin-top:10px"></div>
+<div class="lg"><span><i style="background:#b86e00"></i>Pendiente de visto bueno</span><span><i style="background:#4159a3"></i>Aprobada</span><span><i style="background:#0e7c86"></i>En ruta</span><span><i style="background:#168a4a"></i>Cerrada</span><span><i style="background:#c8372d"></i>Rechazada</span></div>
+</div>
 <div class="bar">
 <button class="ch on" data-f="activas">Activas</button><button class="ch" data-f="pend">Por aprobar</button><button class="ch" data-f="enruta">En ruta</button><button class="ch" data-f="cerradas">Cerradas</button><button class="ch" data-f="todas">Todas</button>
-<input id="q" placeholder="Buscar proveedor, asignado, placa"><input type="date" id="qd" title="Filtrar por fecha">
+<button class="ch vt" id="bCal">📅 Calendario</button><input id="q" placeholder="Buscar proveedor, DP o asignado"><input type="date" id="qd" title="Filtrar por fecha">
 </div>
 <div id="list"><div class="emp">Cargando…</div></div>
 </div>
@@ -108,7 +123,7 @@ a{color:var(--ac)}.emp{text-align:center;color:var(--mu);padding:30px}
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script>
 // ====== CONFIGURA AQUÍ (Supabase > Project Settings > API) ======
-const CFG={url:'https://azmwbkdwrwhyybwnnytu.supabase.co',key:'sb_publishable_t9lCbK3xAPaRBJdXeyKOWw_Ln5zYNAz'};
+const CFG={url:'PEGA_AQUI_TU_PROJECT_URL',key:'PEGA_AQUI_TU_ANON_PUBLIC_KEY'};
 const DOM='@nexocorp.app',MAX_H=8;
 // =================================================================
 const $=s=>document.querySelector(s);
@@ -130,23 +145,57 @@ async function load(){
  if(error){$('#list').innerHTML='<div class="emp">Error al cargar: '+esc(error.message)+'</div>';return}
  rows=data.map(r=>Object.assign(r,{paradas:(r.li_paradas||[]).sort((a,b)=>a.orden-b.orden)}));render();
 }
+const D=ms=>{if(ms==null||isNaN(ms))return'';const m=Math.max(0,Math.round(ms/60000));return m<60?m+' min':Math.floor(m/60)+' h '+String(m%60).padStart(2,'0')+' min'};
+const TT=x=>x&&x.t!=null?x.t:null;
+function calc(r){
+ const n=r.paradas.length,o={legs:[],stays:[],ret:null,trav:0,perm:0,total:null,now:null};let prev=TT(r.salida);
+ r.paradas.forEach(p=>{const a=TT(p.llegada),s=TT(p.salida);let leg=null,st=null;
+  if(prev!=null&&a!=null){leg=a-prev;o.trav+=leg}
+  if(a!=null&&s!=null){st=s-a;o.perm+=st}
+  o.legs.push(leg);o.stays.push(st);if(s!=null)prev=s;else if(a!=null)prev=a});
+ const rt=TT(r.retorno);
+ if(rt!=null&&prev!=null){o.ret=rt-prev;o.trav+=o.ret}
+ if(rt!=null&&TT(r.salida)!=null)o.total=rt-TT(r.salida);
+ if(r.salida&&!r.retorno){const ev=[['s',-1,TT(r.salida)]];
+  r.paradas.forEach((p,i)=>{if(p.llegada)ev.push(['l',i,TT(p.llegada)]);if(p.salida)ev.push(['x',i,TT(p.salida)])});
+  const L=ev[ev.length-1],ms=Date.now()-L[2],nx=L[1]+1;
+  o.now=L[0]==='l'?'Ahora: en el punto '+(L[1]+1)+' ('+r.paradas[L[1]].proveedor+') hace '+D(ms):'Ahora: en trayecto '+(nx<n?'hacia el punto '+(nx+1)+' ('+r.paradas[nx].proveedor+')':'de regreso a CEDIS')+' hace '+D(ms)}
+ return o}
+const pad=n=>String(n).padStart(2,'0'),ymd=d=>d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
+let calM=new Date();calM.setDate(1);
+const evc=r=>r.estado==='rechazada'?'x':r.estado==='pendiente'?'p':prog(r)==='cerrada'?'c':prog(r)==='enruta'?'e':'a';
+function renderCal(){
+ const y=calM.getFullYear(),m=calM.getMonth(),first=new Date(y,m,1),start=new Date(y,m,1-((first.getDay()+6)%7)),sel=$('#qd').value,by={};
+ $('#cTitle').textContent=first.toLocaleDateString('es-BO',{month:'long',year:'numeric'});
+ rows.forEach(r=>(by[r.fecha]=by[r.fecha]||[]).push(r));
+ let g=['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'].map(x=>'<div class="h">'+x+'</div>').join('');
+ for(let i=0;i<42;i++){const d=new Date(start.getFullYear(),start.getMonth(),start.getDate()+i),k=ymd(d),L=by[k]||[];
+  g+='<div class="cd'+(d.getMonth()!==m?' o':'')+(k===today()?' t':'')+(k===sel?' s':'')+'" data-d="'+k+'"><b>'+d.getDate()+'</b>'+
+   L.slice(0,3).map(r=>'<span class="ev '+evc(r)+'">'+esc((r.asignado_nombre||'').split(' ')[0]+' · '+(r.paradas[0]?r.paradas[0].proveedor:'')+(r.paradas.length>1?' +'+(r.paradas.length-1):''))+'</span>').join('')+
+   (L.length>3?'<span class="mu" style="font-size:10px">+'+(L.length-3)+' más</span>':'')+'</div>'}
+ $('#cGrid').innerHTML=g}
 function render(){
  const q=$('#q').value.toLowerCase(),qd=$('#qd').value,c=f=>rows.filter(f).length;
  $('#kp').innerHTML=[['Por aprobar',c(r=>r.estado==='pendiente'),''],['Aprobadas sin salir',c(r=>r.estado==='aprobada'&&prog(r)==='sinsalir'),''],['En ruta (sin retorno)',c(r=>prog(r)==='enruta'),'var(--wa)'],['Con alerta',c(alerta),'var(--er)'],['Cerradas',c(r=>prog(r)==='cerrada'),'var(--ok)']]
   .map(k=>'<div class="k"><b'+(k[2]?' style="color:'+k[2]+'"':'')+'>'+k[1]+'</b><span>'+k[0]+'</span></div>').join('');
+ renderCal();
  const F={activas:r=>r.estado!=='rechazada'&&!r.retorno,pend:r=>r.estado==='pendiente',enruta:r=>prog(r)==='enruta',cerradas:r=>prog(r)==='cerrada',todas:()=>true}[filt];
- const list=rows.filter(r=>F(r)&&(!qd||r.fecha===qd)&&(!q||JSON.stringify([r.asignado_nombre,r.placa,r.paradas.map(p=>p.proveedor)]).toLowerCase().includes(q)))
-  .sort((a,b)=>filt==='activas'||filt==='pend'?a.fecha.localeCompare(b.fecha):b.fecha.localeCompare(a.fecha));
+ const list=rows.filter(r=>(qd?r.fecha===qd:F(r))&&(!q||JSON.stringify([r.asignado_nombre,r.paradas.map(p=>[p.proveedor,p.nro_dp])]).toLowerCase().includes(q)))
+  .sort((a,b)=>qd||filt==='activas'||filt==='pend'?a.fecha.localeCompare(b.fecha):b.fecha.localeCompare(a.fecha));
  if(!list.length){$('#list').innerHTML='<div class="emp">Sin salidas para mostrar.</div>';return}
  const torre=me.rol==='torre';
  $('#list').innerHTML=list.map(r=>{
-  const al=alerta(r),p=prog(r),ok=r.estado==='aprobada';
+  const al=alerta(r),p=prog(r),ok=r.estado==='aprobada',T=calc(r);
   const b=r.estado==='pendiente'?['enruta','Pendiente de visto bueno']:r.estado==='rechazada'?['alerta','Rechazada']:p==='cerrada'?['cerrada','Cerrada']:p==='enruta'?['enruta','En ruta']:['programada','Aprobada'];
-  return '<div class="card"><div class="hd"><div><b>'+esc(r.fecha)+'</b> · '+esc(r.asignado_nombre||'Sin asignar')+' · '+esc(r.placa||'s/placa')+'</div><div>'+(al?'<span class="bd alerta">⚠ '+al+'</span> ':'')+'<span class="bd '+b[0]+'">'+b[1]+'</span></div></div>'+
+  return '<div class="card"><div class="hd"><div><b>'+esc(r.fecha)+'</b> · '+esc(r.asignado_nombre||'Sin asignar')+'</div><div>'+(al?'<span class="bd alerta">⚠ '+al+'</span> ':'')+'<span class="bd '+b[0]+'">'+b[1]+'</span></div></div>'+
   (r.obs?'<div class="mu" style="margin-top:6px">Obs: '+esc(r.obs)+'</div>':'')+(r.motivo?'<div class="mu">Motivo del rechazo: '+esc(r.motivo)+'</div>':'')+
   '<div class="st"><div><b>Salida de CEDIS</b><br><span class="mu">'+fmt(r.salida&&r.salida.t)+'</span> '+loc(r.salida)+'</div>'+(r.salida?'':'<button data-a="salida" data-id="'+r.id+'" '+(ok?'':'disabled')+'>Marcar salida</button>')+'</div>'+
-  r.paradas.map((x,i)=>'<div class="st"><div><b>'+(i+1)+'. '+esc(x.proveedor)+'</b><br><span class="mu">Llegada: '+fmt(x.llegada&&x.llegada.t)+'</span> '+loc(x.llegada)+'</div>'+(x.llegada?'':'<button data-a="parada" data-pid="'+x.id+'" data-id="'+r.id+'" '+(ok&&r.salida?'':'disabled')+'>Llegué</button>')+'</div>').join('')+
-  '<div class="st"><div><b>Retorno a CEDIS</b><br><span class="mu">'+fmt(r.retorno&&r.retorno.t)+'</span> '+loc(r.retorno)+'</div>'+(r.retorno?'':'<button data-a="retorno" data-id="'+r.id+'" '+(ok&&r.salida?'':'disabled')+'>Marcar retorno</button>')+'</div>'+
+  r.paradas.map((x,i)=>'<div class="st"><div>'+(T.legs[i]!=null?'<div class="tm">🚚 Trayecto: '+D(T.legs[i])+'</div>':'')+'<b>'+(i+1)+'. '+esc(x.proveedor)+'</b> <span class="bd programada">DP '+esc(x.nro_dp||'—')+'</span><br>'+
+   '<span class="mu">Llegada: '+fmt(x.llegada&&x.llegada.t)+'</span> '+loc(x.llegada)+'<br><span class="mu">Salida: '+fmt(x.salida&&x.salida.t)+'</span> '+loc(x.salida)+
+   (T.stays[i]!=null?'<div class="tm">⏱ Permanencia: '+D(T.stays[i])+'</div>':'')+'</div><div>'+
+   (!x.llegada?'<button data-a="parada" data-pid="'+x.id+'" data-id="'+r.id+'" '+(ok&&r.salida?'':'disabled')+'>Llegué</button>':!x.salida?'<button data-a="psalida" data-pid="'+x.id+'" data-id="'+r.id+'" '+(ok?'':'disabled')+'>Salí del punto</button>':'')+'</div></div>').join('')+
+  '<div class="st"><div>'+(T.ret!=null?'<div class="tm">🚚 Trayecto de regreso: '+D(T.ret)+'</div>':'')+'<b>Retorno a CEDIS</b><br><span class="mu">'+fmt(r.retorno&&r.retorno.t)+'</span> '+loc(r.retorno)+'</div>'+(r.retorno?'':'<button data-a="retorno" data-id="'+r.id+'" '+(ok&&r.salida?'':'disabled')+'>Marcar retorno</button>')+'</div>'+
+  (r.salida?'<div class="sum">'+(T.total!=null?'⏱ Total de la ruta: <b>'+D(T.total)+'</b> · En trayecto: '+D(T.trav)+' · En puntos: '+D(T.perm):'⏱ Transcurrido: <b>'+D(Date.now()-r.salida.t)+'</b>'+(T.now?'<br>'+esc(T.now):''))+'</div>':'')+
   (torre?'<div class="ac">'+(r.estado!=='aprobada'?'<button class="ok" data-a="aprobar" data-id="'+r.id+'">✔ Dar visto bueno</button>':'')+(r.estado==='pendiente'?'<button class="no" data-a="rechazar" data-id="'+r.id+'">Rechazar</button>':'')+'<button class="d" data-a="del" data-id="'+r.id+'">Eliminar</button></div>':'')+'</div>';
  }).join('');
 }
@@ -156,27 +205,37 @@ $('#list').addEventListener('click',async e=>{const b=e.target.closest('button[d
  else if(a==='rechazar'){const m=prompt('Motivo del rechazo:');if(m===null)return;u=sb.from('li_salidas').update({estado:'rechazada',motivo:m}).eq('id',id)}
  else if(a==='del'){if(!confirm('¿Eliminar esta salida?'))return;u=sb.from('li_salidas').delete().eq('id',id)}
  else{
-  if(a==='retorno'&&r.paradas.some(x=>!x.llegada)&&!confirm('Hay proveedores sin llegada marcada. ¿Cerrar igual?'))return;
+  if(a==='retorno'&&r.paradas.some(x=>!x.llegada||!x.salida)&&!confirm('Hay puntos sin llegada o salida marcada. ¿Cerrar igual?'))return;
   b.disabled=true;b.textContent='Obteniendo GPS…';const g=await gps(),st=Object.assign({t:Date.now()},g||{nogps:true});
-  u=a==='parada'?sb.from('li_paradas').update({llegada:st}).eq('id',b.dataset.pid):sb.from('li_salidas').update({[a]:st}).eq('id',id);
+  u=a==='parada'?sb.from('li_paradas').update({llegada:st}).eq('id',b.dataset.pid):a==='psalida'?sb.from('li_paradas').update({salida:st}).eq('id',b.dataset.pid):sb.from('li_salidas').update({[a]:st}).eq('id',id);
  }
  const {error}=await u;if(error)fail(error);load();
 });
-document.querySelectorAll('.ch').forEach(b=>b.onclick=()=>{filt=b.dataset.f;document.querySelectorAll('.ch').forEach(x=>x.classList.toggle('on',x===b));render()});
+document.querySelectorAll('.ch[data-f]').forEach(b=>b.onclick=()=>{filt=b.dataset.f;$('#qd').value='';document.querySelectorAll('.ch[data-f]').forEach(x=>x.classList.toggle('on',x===b));render()});
+$('#cGrid').addEventListener('click',e=>{const d=e.target.closest('[data-d]');if(!d)return;$('#qd').value=$('#qd').value===d.dataset.d?'':d.dataset.d;render();if($('#qd').value)$('#list').scrollIntoView({behavior:'smooth',block:'nearest'})});
+$('#cPrev').onclick=()=>{calM.setMonth(calM.getMonth()-1);renderCal()};$('#cNext').onclick=()=>{calM.setMonth(calM.getMonth()+1);renderCal()};
+$('#cHoy').onclick=()=>{calM=new Date();calM.setDate(1);renderCal()};
+$('#bCal').onclick=()=>{$('#calw').hidden=!$('#calw').hidden};
 $('#q').oninput=render;$('#qd').onchange=render;
 
+function addPt(){const d=document.createElement('div');d.className='pt';
+ d.innerHTML='<input class="pv" placeholder="Proveedor (ej. Laboratorios Vita)"><input class="pd" placeholder="Nro de DP"><button class="d" type="button">✕</button>';
+ d.querySelector('button').onclick=()=>{if($('#fPts').children.length>1)d.remove()};$('#fPts').appendChild(d)}
+$('#bPt').onclick=addPt;
 $('#bAdd').onclick=async()=>{
- const provs=$('#fProv').value.split('\n').map(s=>s.trim()).filter(Boolean),fecha=$('#fFecha').value,torre=me.rol==='torre',asig=torre?$('#fAsig').value:me.id;
- if(!fecha||!asig||!provs.length)return alert('Completa fecha, asignado y al menos un proveedor.');
+ const pts=[...document.querySelectorAll('#fPts .pt')].map(d=>({proveedor:d.querySelector('.pv').value.trim(),nro_dp:d.querySelector('.pd').value.trim()||null})).filter(x=>x.proveedor);
+ const fecha=$('#fFecha').value,torre=me.rol==='torre',asig=torre?$('#fAsig').value:me.id;
+ if(!fecha||!asig||!pts.length)return alert('Completa fecha, asignado y al menos un punto de llegada.');
  const nom=(people.find(p=>p.id===asig)||me).nombre;
- const row={fecha,asignado_id:asig,asignado_nombre:nom,placa:$('#fPlaca').value.trim()||null,obs:$('#fObs').value.trim()||null,estado:torre?'aprobada':'pendiente'};
+ const row={fecha,asignado_id:asig,asignado_nombre:nom,obs:$('#fObs').value.trim()||null,estado:torre?'aprobada':'pendiente'};
  if(torre){row.aprobado_por=me.id;row.aprobado_en=new Date().toISOString()}
  const {data,error}=await sb.from('li_salidas').insert(row).select().single();if(error)return fail(error);
- const {error:e2}=await sb.from('li_paradas').insert(provs.map((proveedor,i)=>({salida_id:data.id,orden:i+1,proveedor})));if(e2)return fail(e2);
- $('#fProv').value='';$('#fObs').value='';$('#nf').open=false;load();
+ const {error:e2}=await sb.from('li_paradas').insert(pts.map((x,i)=>({salida_id:data.id,orden:i+1,proveedor:x.proveedor,nro_dp:x.nro_dp})));if(e2)return fail(e2);
+ $('#fPts').innerHTML='';addPt();$('#fObs').value='';$('#nf').open=false;load();
 };
-$('#bCsv').onclick=()=>{const L=[['Fecha','Asignado','Placa','Visto bueno','Salida CEDIS','Proveedor','Llegada proveedor','Retorno CEDIS','Observaciones']];
- rows.forEach(r=>r.paradas.forEach(x=>L.push([r.fecha,r.asignado_nombre,r.placa,r.estado,fmt(r.salida&&r.salida.t),x.proveedor,fmt(x.llegada&&x.llegada.t),fmt(r.retorno&&r.retorno.t),r.obs])));
+$('#bCsv').onclick=()=>{const L=[['Fecha','Asignado','Visto bueno','Salida CEDIS','Punto','Proveedor','Nro DP','Llegada','Salida del punto','Trayecto (min)','Permanencia (min)','Retorno CEDIS','Trayecto regreso (min)','Total ruta (min)','Observaciones']];
+ const mm=x=>x==null?'':Math.round(x/60000);
+ rows.forEach(r=>{const T=calc(r);r.paradas.forEach((x,i)=>L.push([r.fecha,r.asignado_nombre,r.estado,fmt(r.salida&&r.salida.t),i+1,x.proveedor,x.nro_dp,fmt(x.llegada&&x.llegada.t),fmt(x.salida&&x.salida.t),mm(T.legs[i]),mm(T.stays[i]),fmt(r.retorno&&r.retorno.t),mm(T.ret),mm(T.total),r.obs]))});
  const csv='\ufeff'+L.map(l=>l.map(v=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"').join(',')).join('\n');
  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));a.download='salidas_logistica_inversa.csv';a.click()};
 
@@ -184,7 +243,7 @@ async function boot(user){
  const {data:p}=await sb.from('li_perfiles').select('*').eq('id',user.id).maybeSingle();
  if(!p||!p.activo){await sb.auth.signOut();$('#lm').textContent='Tu usuario no tiene acceso a este módulo. Pide a la torre de control que te habilite.';return}
  me=p;$('#login').hidden=true;$('#app').hidden=false;$('#who').textContent=p.nombre;$('#rol').textContent=p.rol==='torre'?'Torre de control':'Asignado';
- $('#fFecha').value=today();
+ $('#fFecha').value=today();$('#fPts').innerHTML='';addPt();
  if(p.rol==='torre'){const {data}=await sb.from('li_perfiles').select('*').eq('activo',true).order('nombre');people=data||[];$('#fAsig').innerHTML=people.map(x=>'<option value="'+x.id+'">'+esc(x.nombre)+'</option>').join('')}
  else $('#wAsig').hidden=true;
  await load();
