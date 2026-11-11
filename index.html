@@ -174,6 +174,9 @@ function renderCal(){
    L.slice(0,3).map(r=>'<span class="ev '+evc(r)+'">'+esc((r.asignado_nombre||'').split(' ')[0]+' · '+(r.paradas[0]?r.paradas[0].proveedor:'')+(r.paradas.length>1?' +'+(r.paradas.length-1):''))+'</span>').join('')+
    (L.length>3?'<span class="mu" style="font-size:10px">+'+(L.length-3)+' más</span>':'')+'</div>'}
  $('#cGrid').innerHTML=g}
+const canEd=r=>(r.estado==='pendiente'||r.estado==='aprobada')&&!r.retorno;
+const mv=(r,x,i)=>{if(!canEd(r)||x.llegada)return'';const P=r.paradas,u=i>0&&!P[i-1].llegada,d=i<P.length-1&&!P[i+1].llegada,at=' data-pid="'+x.id+'" data-id="'+r.id+'" ';
+ return '<button class="s" style="padding:6px 10px;margin-right:4px" title="Subir"'+at+'data-a="up" '+(u?'':'disabled')+'>▲</button><button class="s" style="padding:6px 10px;margin-right:4px" title="Bajar"'+at+'data-a="down" '+(d?'':'disabled')+'>▼</button>'};
 function render(){
  const q=$('#q').value.toLowerCase(),qd=$('#qd').value,c=f=>rows.filter(f).length;
  $('#kp').innerHTML=[['Por aprobar',c(r=>r.estado==='pendiente'),''],['Aprobadas sin salir',c(r=>r.estado==='aprobada'&&prog(r)==='sinsalir'),''],['En ruta (sin retorno)',c(r=>prog(r)==='enruta'),'var(--wa)'],['Con alerta',c(alerta),'var(--er)'],['Cerradas',c(r=>prog(r)==='cerrada'),'var(--ok)']]
@@ -192,8 +195,9 @@ function render(){
   '<div class="st"><div><b>Salida de CEDIS</b><br><span class="mu">'+fmt(r.salida&&r.salida.t)+'</span> '+loc(r.salida)+'</div>'+(r.salida?'':'<button data-a="salida" data-id="'+r.id+'" '+(ok?'':'disabled')+'>Marcar salida</button>')+'</div>'+
   r.paradas.map((x,i)=>'<div class="st"><div>'+(T.legs[i]!=null?'<div class="tm">🚚 Trayecto: '+D(T.legs[i])+'</div>':'')+'<b>'+(i+1)+'. '+esc(x.proveedor)+'</b> <span class="bd programada">DP '+esc(x.nro_dp||'—')+'</span><br>'+
    '<span class="mu">Llegada: '+fmt(x.llegada&&x.llegada.t)+'</span> '+loc(x.llegada)+'<br><span class="mu">Salida: '+fmt(x.salida&&x.salida.t)+'</span> '+loc(x.salida)+
-   (T.stays[i]!=null?'<div class="tm">⏱ Permanencia: '+D(T.stays[i])+'</div>':'')+'</div><div>'+
+   (T.stays[i]!=null?'<div class="tm">⏱ Permanencia: '+D(T.stays[i])+'</div>':'')+'</div><div>'+mv(r,x,i)+
    (!x.llegada?'<button data-a="parada" data-pid="'+x.id+'" data-id="'+r.id+'" '+(ok&&r.salida?'':'disabled')+'>Llegué</button>':!x.salida?'<button data-a="psalida" data-pid="'+x.id+'" data-id="'+r.id+'" '+(ok?'':'disabled')+'>Salí del punto</button>':'')+'</div></div>').join('')+
+  (canEd(r)?'<div class="st"><div class="mu">¿Emergencia o cambio de ruta? Puedes agregar un punto aunque la ruta ya haya iniciado.</div><button class="s" data-a="addpt" data-id="'+r.id+'">+ Agregar punto</button></div>':'')+
   '<div class="st"><div>'+(T.ret!=null?'<div class="tm">🚚 Trayecto de regreso: '+D(T.ret)+'</div>':'')+'<b>Retorno a CEDIS</b><br><span class="mu">'+fmt(r.retorno&&r.retorno.t)+'</span> '+loc(r.retorno)+'</div>'+(r.retorno?'':'<button data-a="retorno" data-id="'+r.id+'" '+(ok&&r.salida?'':'disabled')+'>Marcar retorno</button>')+'</div>'+
   (r.salida?'<div class="sum">'+(T.total!=null?'⏱ Total de la ruta: <b>'+D(T.total)+'</b> · En trayecto: '+D(T.trav)+' · En puntos: '+D(T.perm):'⏱ Transcurrido: <b>'+D(Date.now()-r.salida.t)+'</b>'+(T.now?'<br>'+esc(T.now):''))+'</div>':'')+
   (torre?'<div class="ac">'+(r.estado!=='aprobada'?'<button class="ok" data-a="aprobar" data-id="'+r.id+'">✔ Dar visto bueno</button>':'')+(r.estado==='pendiente'?'<button class="no" data-a="rechazar" data-id="'+r.id+'">Rechazar</button>':'')+'<button class="d" data-a="del" data-id="'+r.id+'">Eliminar</button></div>':'')+'</div>';
@@ -204,6 +208,12 @@ $('#list').addEventListener('click',async e=>{const b=e.target.closest('button[d
  if(a==='aprobar')u=sb.from('li_salidas').update({estado:'aprobada',motivo:null,aprobado_por:me.id,aprobado_en:new Date().toISOString()}).eq('id',id);
  else if(a==='rechazar'){const m=prompt('Motivo del rechazo:');if(m===null)return;u=sb.from('li_salidas').update({estado:'rechazada',motivo:m}).eq('id',id)}
  else if(a==='del'){if(!confirm('¿Eliminar esta salida?'))return;u=sb.from('li_salidas').delete().eq('id',id)}
+ else if(a==='addpt'){const pv=prompt('Proveedor del nuevo punto:');if(!pv||!pv.trim())return;const dp=prompt('Nro de DP (opcional):');if(dp===null)return;
+  u=sb.from('li_paradas').insert({salida_id:id,orden:Math.max(0,...r.paradas.map(x=>x.orden))+1,proveedor:pv.trim(),nro_dp:dp.trim()||null})}
+ else if(a==='up'||a==='down'){const i=r.paradas.findIndex(x=>x.id===b.dataset.pid),j=a==='up'?i-1:i+1,A=r.paradas[i],B=r.paradas[j];
+  if(!A||!B||A.llegada||B.llegada)return;b.disabled=true;const arr=r.paradas.slice();[arr[i],arr[j]]=[arr[j],arr[i]];
+  const res=await Promise.all(arr.map((x,k)=>x.orden!==k+1&&!x.llegada?sb.from('li_paradas').update({orden:k+1}).eq('id',x.id):null).filter(Boolean));
+  const er=res.map(x=>x.error).find(Boolean);if(er)fail(er);load();return}
  else{
   if(a==='retorno'&&r.paradas.some(x=>!x.llegada||!x.salida)&&!confirm('Hay puntos sin llegada o salida marcada. ¿Cerrar igual?'))return;
   b.disabled=true;b.textContent='Obteniendo GPS…';const g=await gps(),st=Object.assign({t:Date.now()},g||{nogps:true});
